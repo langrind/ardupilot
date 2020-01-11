@@ -37,6 +37,7 @@
 #include <AP_ToshibaCAN/AP_ToshibaCAN.h>
 #include <AP_SerialManager/AP_SerialManager.h>
 #include <AP_PiccoloCAN/AP_PiccoloCAN.h>
+#include <AP_TinCAN/AP_TinCAN.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -182,6 +183,15 @@ void AP_BoardConfig_CAN::init()
 
                 if (_drivers[i]._driver == nullptr) {
                     AP_BoardConfig::config_error("PiccoloCAN init failed");
+                    continue;
+                }
+#endif
+#ifdef TINCAN_ENABLED
+            } else if (prot_type == Protocol_Type_TinCAN) {
+                _drivers[i]._driver = _drivers[i]._pcan = new AP_TinCAN;
+
+                if (_drivers[i]._driver == nullptr) {
+                    AP_BoardConfig::config_error("TinCAN init failed");
                     continue;
                 }
 #endif
