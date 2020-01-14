@@ -189,7 +189,8 @@ bool AP_Alt_KDECAN::transmit_slot(uint8_t interface_index)
 
 #define DEFAULT_NUM_POLES 14
 
-void AP_Alt_KDECAN::send_mavlink(uint8_t chan)
+// send ESC telemetry messages over MAVLink
+void AP_Alt_KDECAN::send_esc_telemetry_mavlink(uint8_t chan)
 {
     if (!_telem_sem.take(1)) {
         debug_can(2, "ALT_KDECAN: failed to get telemetry semaphore on MAVLink read\n\r");
@@ -206,7 +207,6 @@ void AP_Alt_KDECAN::send_mavlink(uint8_t chan)
     uint8_t temperature[4] {};
     uint16_t totalcurrent[4] {};
     uint16_t count[4] {};
-    //uint8_t num_poles = _num_poles > 0 ? _num_poles : DEFAULT_NUM_POLES;
     uint8_t num_poles = DEFAULT_NUM_POLES;
     uint64_t now = AP_HAL::micros64();
 

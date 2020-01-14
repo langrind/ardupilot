@@ -41,6 +41,7 @@
 #include <AP_Baro/AP_Baro.h>
 #include <AP_EFI/AP_EFI.h>
 #include <AP_Proximity/AP_Proximity.h>
+#include <AP_TinCAN/AP_TinCAN.h>
 
 #include <stdio.h>
 
@@ -4553,6 +4554,15 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
                     AP_PiccoloCAN *ap_pcan = AP_PiccoloCAN::get_pcan(i);
                     if (ap_pcan != nullptr) {
                         ap_pcan->send_esc_telemetry_mavlink(uint8_t(chan));
+                    }
+                    break;
+                }
+#endif
+#ifdef TINCAN_ENABLED
+                case AP_BoardConfig_CAN::Protocol_Type_TinCAN: {
+                    AP_TinCAN *ap_tcan = AP_TinCAN::get_tcan(i);
+                    if (ap_tcan != nullptr) {
+                        ap_tcan->send_esc_telemetry_mavlink(uint8_t(chan));
                     }
                     break;
                 }

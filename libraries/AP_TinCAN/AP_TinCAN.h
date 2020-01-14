@@ -53,6 +53,10 @@ public:
     }
 
     /* Then the two problematic interfaces: esc telemetry and servo output, punting for now */
+    virtual void send_esc_telemetry_mavlink(uint8_t mav_chan)
+    {
+        return;
+    }
 
     /* Then the question of how to coordinate transmit slots */
 

@@ -210,6 +210,11 @@ void AP_TinCAN::update()
 // send ESC telemetry messages over MAVLink
 void AP_TinCAN::send_esc_telemetry_mavlink(uint8_t mav_chan)
 {
+    for (int i = 0; i < ARRAY_SIZE(client_array); i++) {
+        if (client_array[i] ) {
+            client_array[i]->send_esc_telemetry_mavlink(mav_chan);
+        }
+    }
 }
 
 // client calls this to register with us

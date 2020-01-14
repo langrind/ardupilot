@@ -191,6 +191,10 @@
 
 #include "mode.h"
 
+#include <AP_WingAngleSensor/AP_WingAngleSensor.h>
+#include <AP_WingAngleServo/AP_WingAngleServo.h>
+#include <AP_Alt_KDECAN/AP_Alt_KDECAN.h>
+
 class Copter : public AP_Vehicle {
 public:
     friend class GCS_MAVLINK_Copter;
@@ -639,6 +643,12 @@ private:
                   "_failsafe_priorities is missing the sentinel");
 
 
+
+#ifdef TINCAN_ENABLED
+    AP_WingAngleSensor wing_angle_sensor;
+    AP_WingAngleServo  wing_angle_servo;
+    AP_Alt_KDECAN      alt_kdecan;
+#endif
 
     // AP_State.cpp
     void set_auto_armed(bool b);

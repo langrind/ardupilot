@@ -48,7 +48,7 @@ public:
     void init();
 
     // send MAVLink telemetry packets
-    void send_mavlink(uint8_t chan);
+    void send_esc_telemetry_mavlink(uint8_t chan) override;
 
     bool receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame) override;
     bool transmit_slot(uint8_t interface_index) override;
@@ -75,18 +75,6 @@ private:
     } _telemetry[KDECAN_MAX_NUM_ESCS];
     AP_TinCAN * p_tincan = nullptr;
 
-#if 0
-    union frame_id_t {
-        struct {
-            uint8_t object_address;
-            uint8_t destination_id;
-            uint8_t source_id;
-            uint8_t priority:5;
-            uint8_t unused:3;
-        };
-        uint32_t value;
-    };
-#endif
     static const uint8_t AUTOPILOT_NODE_ID = 0;
     static const uint8_t BROADCAST_NODE_ID = 1;
     static const uint8_t ESC_NODE_ID_FIRST = 2;

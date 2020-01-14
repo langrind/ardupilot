@@ -190,6 +190,7 @@ void Plane::init_ardupilot()
     // initialise wing-angle sensor
     wing_angle_sensor.init();
     wing_angle_servo.init();
+    alt_kdecan.init();
 #endif
 
     // disable safety if requested
