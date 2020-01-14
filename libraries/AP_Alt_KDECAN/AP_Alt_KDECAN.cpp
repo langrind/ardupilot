@@ -71,6 +71,7 @@ void AP_Alt_KDECAN::init()
             printf("%s: found tincan, adding us\r\n", __PRETTY_FUNCTION__);
             // client calls this to register with us
             tincan->add_client(this);
+            p_tincan = tincan;
             break;
         }
     }
@@ -168,7 +169,7 @@ bool AP_Alt_KDECAN::transmit_slot(uint8_t interface_index)
         }
     };
 
-    uavcan::CanFrame frame { (id.value), 0, 0 };
+    uavcan::CanFrame frame { (id.value | uavcan::CanFrame::FlagEFF), nullptr, 0 };
 
     auto timeout = uavcan::MonotonicTime::fromUSec(AP_HAL::micros64() + 800);
 
