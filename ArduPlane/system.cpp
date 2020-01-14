@@ -186,7 +186,10 @@ void Plane::init_ardupilot()
     g2.gripper.init();
 #endif
 
+#ifdef TINCAN_ENABLED
     // initialise wing-angle sensor
+    wing_angle_sensor.init();
+#endif
 
     // disable safety if requested
     BoardConfig.init_safety();

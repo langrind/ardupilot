@@ -86,7 +86,7 @@ void AP_TinCAN::init(uint8_t driver_index, bool enable_filters)
     }
 
     // allocate array of clients, fixed maximum.
-    
+
     // start calls to loop in separate thread
     if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_TinCAN::loop, void), _thread_name, 4096, AP_HAL::Scheduler::PRIORITY_MAIN, 1)) {
         debug_can(1, "TinCAN: couldn't create thread\n\r");
@@ -105,7 +105,7 @@ void AP_TinCAN::loop()
 {
     //const uint32_t timeout_us = MIN(AP::scheduler().get_loop_period_us(), TINCAN_SEND_TIMEOUT_US);
 
-    uint32_t one_sec_ms = AP_HAL::millis() + 1000;
+    uint64_t one_millisec_us = AP_HAL::micros64() + 1000;
 
     while (true) {
         if (!_initialized) {
@@ -115,32 +115,22 @@ void AP_TinCAN::loop()
             continue;
         }
 
-        hal.scheduler->delay_microseconds(50);
+        do_receive();
 
-        uavcan::CanFrame recv_frame;
-        int now_ms = AP_HAL::millis();
+        uint64_t now = AP_HAL::micros64();
+        if (one_millisec_us < now) {
+            if ( now - one_millisec_us > 1000 ) {
+                /* there's been a large scheduling gap, don't try to catch up */
+                one_millisec_us = now + 1000;
+            } else {
+                one_millisec_us += 1000;
+            }
 
-        // ok this fuckin thing works good with a 50 ms select timeout, but not a one-second timeout
-        // next, try using AP_HAL::micros64() again with the understanding that 50 ms or so is max 
-        uint64_t next_us = (uint64_t)now_ms * 1000 + 50000;
-        printf ( "pre read_frame: now_ms %d\n\r",  now_ms);
-        uavcan::MonotonicTime timeout = uavcan::MonotonicTime::fromUSec(next_us);
-
-        while (read_frame(recv_frame, timeout)) {
-            printf ( "read_frame done pos\n\r" );
-
-            dispatch_frame(CAN_IFACE_INDEX, recv_frame);
-
-            // decode rpm and voltage data
-            //if ((recv_frame.id >= MOTOR_DATA1) && (recv_frame.id <= MOTOR_DATA1 + 12)) {
-        }
-        
-        now_ms = AP_HAL::millis();
-        printf ( "post read_frame: now_ms %d\n\r",  now_ms);
-
-        if ( one_sec_ms <= AP_HAL::millis() ) {
-            one_sec_ms = AP_HAL::millis() + 1000;
-            printf ( "It's been a second in %s next millis is %lu\n\r", __FUNCTION__, one_sec_ms );
+            for ( int i = 0; i < ARRAY_SIZE(client_array); i++ ) {
+                if (client_array[i] ) {
+                    client_array[i]->transmit_slot(CAN_IFACE_INDEX);
+                }
+            }
         }
     }
 }
@@ -164,6 +154,30 @@ bool AP_TinCAN::write_frame(uavcan::CanFrame &out_frame, uavcan::MonotonicTime t
 
     // send frame and return success
     return (_can_driver->getIface(CAN_IFACE_INDEX)->send(out_frame, timeout, uavcan::CanIOFlagAbortOnError) == 1);
+}
+
+void AP_TinCAN::do_receive()
+{
+    uavcan::CanFrame recv_frame;
+
+    // When testing, this timeout didn't work for long values of timeout ( > 100 ms), I don't understand why not
+    uavcan::MonotonicTime timeout = uavcan::MonotonicTime::fromUSec(AP_HAL::micros64() + 1000);
+
+    while (read_frame(recv_frame, timeout)) {
+        bool consumed = false;
+
+        for (int i = 0; i < ARRAY_SIZE(client_array); i++) {
+            if (client_array[i] ) {
+                if (!consumed || client_array[i]->is_greedy(CAN_IFACE_INDEX) ) {
+                    if (client_array[i]->receive_frame(CAN_IFACE_INDEX, recv_frame) ) {
+                        consumed = true;
+                    }
+                }
+            }
+        }
+
+        // Should have a counter for received but unconsumed CAN messages, because that shouldn't happen
+    }
 }
 
 // read frame on CAN bus, returns true on success
@@ -196,20 +210,6 @@ void AP_TinCAN::update()
 // send ESC telemetry messages over MAVLink
 void AP_TinCAN::send_esc_telemetry_mavlink(uint8_t mav_chan)
 {
-}
-
-// iterate through client list
-void AP_TinCAN::dispatch_frame( uint8_t interface_index, uavcan::CanFrame &recv_frame )
-{
-    bool consumed = false;
-    
-    for ( int i = 0; i < ARRAY_SIZE(client_array); i++ ) {
-        if ( !consumed || client_array[i]->is_greedy(interface_index) ) {
-            if ( client_array[i]->receive_frame(interface_index, recv_frame) ) {
-                consumed = true;
-            }
-        }
-    }
 }
 
 // client calls this to register with us

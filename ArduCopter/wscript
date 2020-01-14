@@ -34,6 +34,8 @@ def build(bld):
             'AP_KDECAN',
             'AP_TinCAN',
             'AP_WingAngleSensor',
+            'AP_WingAngleServo',
+            'AP_Alt_KDECAN',
         ],
     )
 

@@ -31,24 +31,43 @@ union frame_id_t {
     uint32_t value;
 };
 
-class AP_TinCANClient {
+class AP_TinCANClient
+{
 public:
     /* give the client an opportunity to process a received frame */
-    virtual bool receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame) { return false; }
-    
+    virtual bool receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame)
+    {
+        return false;
+    }
+
     /* give the client a transmit slot */
-    virtual bool transmit_slot(uint8_t interface_index, uavcan::CanFrame &recv_frame) { return false; }
+    virtual bool transmit_slot(uint8_t interface_index )
+    {
+        return false;
+    }
 
     /* Does the client want to receive everything? */
-    virtual bool is_greedy(uint8_t interface_index) { return false; }
+    virtual bool is_greedy(uint8_t interface_index)
+    {
+        return false;
+    }
 
     /* Then the two problematic interfaces: esc telemetry and servo output, punting for now */
 
     /* Then the question of how to coordinate transmit slots */
 
-    int get_transmit_period() { return transmit_period_ms; }
-    int get_transmit_offset() { return transmit_offset_ms; }
-    void set_transmit_offset(int _transmit_offset_ms ) { transmit_offset_ms = _transmit_offset_ms; }
+    int get_transmit_period()
+    {
+        return transmit_period_ms;
+    }
+    int get_transmit_offset()
+    {
+        return transmit_offset_ms;
+    }
+    void set_transmit_offset(int _transmit_offset_ms )
+    {
+        transmit_offset_ms = _transmit_offset_ms;
+    }
 
 protected:
     int transmit_period_ms;
@@ -56,7 +75,8 @@ protected:
 
 };
 
-class AP_TinCAN : public AP_HAL::CANProtocol {
+class AP_TinCAN : public AP_HAL::CANProtocol
+{
 public:
     AP_TinCAN();
     ~AP_TinCAN();
@@ -85,13 +105,13 @@ public:
 
     // client calls this to register with us
     int add_client(AP_TinCANClient * client);
-    
+
 private:
 
     // loop to perform all activity
     void loop();
 
-    void dispatch_frame( uint8_t interface_index, uavcan::CanFrame &recv_frame );
+    void do_receive( void );
 
     bool _initialized;
     char _thread_name[9];
@@ -100,6 +120,6 @@ private:
     const uavcan::CanFrame* _select_frames[uavcan::MaxCanIfaces] { };
 
     AP_TinCANClient * client_array[TINCAN_MAX_CLIENTS];
-    
+
 };
 

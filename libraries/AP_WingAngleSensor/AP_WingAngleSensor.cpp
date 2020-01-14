@@ -4,6 +4,9 @@
 #ifdef TINCAN_ENABLED
 #include <AP_WingAngleSensor/AP_WingAngleSensor.h>
 #include <AP_HAL/utility/sparse-endian.h>
+#include <AP_BoardConfig/AP_BoardConfig_CAN.h>
+
+#define CAN_READ_16(buffer, offset) (be16toh(*(uint16_t *)&(buffer)[offset]))
 
 AP_WingAngleSensor::AP_WingAngleSensor()
 {
@@ -11,7 +14,18 @@ AP_WingAngleSensor::AP_WingAngleSensor()
     transmit_offset_ms = 0;
 }
 
-#define CAN_READ_16(buffer, offset) (be16toh(*(uint16_t *)&(buffer)[offset]))
+void AP_WingAngleSensor::init()
+{
+    for (uint8_t i = 0; i < AP::can().get_num_drivers(); i++) {
+        AP_TinCAN * tincan = AP_TinCAN::get_tcan(i);
+        if (tincan) {
+            printf("%s: found tincan, adding us\r\n", __FUNCTION__);
+            // client calls this to register with us
+            tincan->add_client(this);
+            break;
+        }
+    }
+}
 
 bool AP_WingAngleSensor::receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame)
 {
