@@ -68,7 +68,7 @@ void AP_Alt_KDECAN::init()
     for (uint8_t i = 0; i < AP::can().get_num_drivers(); i++) {
         AP_TinCAN * tincan = AP_TinCAN::get_tcan(i);
         if (tincan) {
-            printf("%s: found tincan, adding us\r\n", __FUNCTION__);
+            printf("%s: found tincan, adding us\r\n", __PRETTY_FUNCTION__);
             // client calls this to register with us
             tincan->add_client(this);
             break;

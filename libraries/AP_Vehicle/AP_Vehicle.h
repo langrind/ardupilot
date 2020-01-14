@@ -37,6 +37,7 @@
 #include <AP_ServoRelayEvents/AP_ServoRelayEvents.h>
 #include <AP_Camera/AP_RunCam.h>
 #include <AP_WingAngleSensor/AP_WingAngleSensor.h>
+#include <AP_WingAngleServo/AP_WingAngleServo.h>
 
 class AP_Vehicle : public AP_HAL::HAL::Callbacks {
 
@@ -162,6 +163,7 @@ protected:
 
 #ifdef TINCAN_ENABLED
     AP_WingAngleSensor wing_angle_sensor;
+    AP_WingAngleServo  wing_angle_servo;
 #endif
 
 private:

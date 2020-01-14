@@ -189,6 +189,7 @@ void Plane::init_ardupilot()
 #ifdef TINCAN_ENABLED
     // initialise wing-angle sensor
     wing_angle_sensor.init();
+    wing_angle_servo.init();
 #endif
 
     // disable safety if requested
