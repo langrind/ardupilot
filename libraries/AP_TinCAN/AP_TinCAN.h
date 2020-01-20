@@ -35,7 +35,7 @@ class AP_TinCANClient
 {
 public:
     /* give the client an opportunity to process a received frame */
-    virtual bool receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame)
+    virtual bool receive_frame(uint8_t interface_index, const uavcan::CanFrame &recv_frame)
     {
         return false;
     }
@@ -79,7 +79,11 @@ protected:
 
 };
 
+#ifdef TINCAN_IN_UAVCAN
+class AP_TinCAN
+#else
 class AP_TinCAN : public AP_HAL::CANProtocol
+#endif
 {
 public:
     AP_TinCAN();
@@ -89,11 +93,17 @@ public:
     AP_TinCAN(const AP_TinCAN &other) = delete;
     AP_TinCAN &operator=(const AP_TinCAN&) = delete;
 
-    // Return TinCAN from @driver_index or nullptr if it's not ready or doesn't exist
-    static AP_TinCAN *get_tcan(uint8_t driver_index);
+    // get singleton instance
+    static AP_TinCAN *get_singleton(void) {
+        return _singleton;
+    }
 
     // initialise TinCAN bus
+#ifdef TINCAN_IN_UAVCAN
+    void init(uint8_t driver_index, bool enable_filters);
+#else
     void init(uint8_t driver_index, bool enable_filters) override;
+#endif
 
     // called from SRV_Channels
     void update();
@@ -110,7 +120,12 @@ public:
     // client calls this to register with us
     int add_client(AP_TinCANClient * client);
 
+    void one_ms_tick();
+
+    bool handle_received_frame(const uavcan::CanFrame& can_frame);
+
 private:
+    static AP_TinCAN *_singleton;
 
     // loop to perform all activity
     void loop();
@@ -124,6 +139,8 @@ private:
     const uavcan::CanFrame* _select_frames[uavcan::MaxCanIfaces] { };
 
     AP_TinCANClient * client_array[TINCAN_MAX_CLIENTS];
-
+#ifndef TINCAN_IN_UAVCAN
+    uint64_t one_millisec_us = 0;
+#endif
 };
 

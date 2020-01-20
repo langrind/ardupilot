@@ -187,6 +187,7 @@ void AP_BoardConfig_CAN::init()
                 }
 #endif
 #ifdef TINCAN_ENABLED
+#ifndef TINCAN_IN_UAVCAN
             } else if (prot_type == Protocol_Type_TinCAN) {
                 _drivers[i]._driver = _drivers[i]._pcan = new AP_TinCAN;
 
@@ -194,6 +195,7 @@ void AP_BoardConfig_CAN::init()
                     AP_BoardConfig::config_error("TinCAN init failed");
                     continue;
                 }
+#endif
 #endif
             } else {
                 continue;

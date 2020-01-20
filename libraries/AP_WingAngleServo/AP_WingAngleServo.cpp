@@ -9,25 +9,22 @@
 #define CAN_READ_16(buffer, offset) (be16toh(*(uint16_t *)&(buffer)[(offset)]))
 #define CAN_WRITE_16(buffer, offset, value) ((buffer)[(offset)] = be16toh(value))
 
-AP_WingAngleServo::AP_WingAngleServo() : output_pwm(0), next_pwm_val_send_ms(0)
+AP_WingAngleServo::AP_WingAngleServo()
 {
 }
 
 void AP_WingAngleServo::init()
 {
-    for (uint8_t i = 0; i < AP::can().get_num_drivers(); i++) {
-        AP_TinCAN * tincan = AP_TinCAN::get_tcan(i);
-        if (tincan) {
-            printf("%s: found tincan, adding us\r\n", __FUNCTION__);
-            // client calls this to register with us
-            tincan->add_client(this);
-            p_tincan = tincan;
-        }
+    AP_TinCAN * tincan = AP_TinCAN::get_singleton();
+    if (tincan) {
+        //printf("%s: found tincan, adding us\r\n", __PRETTY_FUNCTION__);
+        tincan->add_client(this);
+        p_tincan = tincan;
     }
 }
 
 /* Haven't made the CAN Protocol for the servo yet, so this is a placeholder */
-bool AP_WingAngleServo::receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame)
+bool AP_WingAngleServo::receive_frame(uint8_t interface_index, const uavcan::CanFrame &recv_frame)
 {
     union frame_id_t frame_id;
     frame_id.value = recv_frame.id;
@@ -43,7 +40,13 @@ bool AP_WingAngleServo::receive_frame(uint8_t interface_index, uavcan::CanFrame 
 bool AP_WingAngleServo::transmit_slot(uint8_t interface_index)
 {
     uint32_t now = AP_HAL::millis();
-    if ( now < next_pwm_val_send_ms ) {
+    if (now < next_pwm_val_send_ms) {
+        return false;
+    }
+
+    if (!output_changed) {
+        /* schedule next send */
+        next_pwm_val_send_ms += SEND_PWM_PERIOD_MS;
         return false;
     }
 
@@ -65,7 +68,8 @@ bool AP_WingAngleServo::transmit_slot(uint8_t interface_index)
     //CAN_WRITE_16(can_data, 0, output_pwm);
 
     uavcan::CanFrame frame { (id.value), 0, 0 };
-    CAN_WRITE_16(frame.data, 0, output_pwm);
+    frame.data[0] = output_direction;
+    frame.data[1] = output_speed;
     frame.dlc = 2;
 
     auto timeout = uavcan::MonotonicTime::fromUSec(AP_HAL::micros64() + 800);

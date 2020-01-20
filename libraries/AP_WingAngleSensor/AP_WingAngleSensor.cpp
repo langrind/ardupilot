@@ -16,18 +16,14 @@ AP_WingAngleSensor::AP_WingAngleSensor()
 
 void AP_WingAngleSensor::init()
 {
-    for (uint8_t i = 0; i < AP::can().get_num_drivers(); i++) {
-        AP_TinCAN * tincan = AP_TinCAN::get_tcan(i);
-        if (tincan) {
-            printf("%s: found tincan, adding us\r\n", __FUNCTION__);
-            // client calls this to register with us
-            tincan->add_client(this);
-            break;
-        }
+    AP_TinCAN * tincan = AP_TinCAN::get_singleton();
+    if (tincan) {
+        // printf("%s: found tincan, adding us\r\n", __PRETTY_FUNCTION__);
+        tincan->add_client(this);
     }
 }
 
-bool AP_WingAngleSensor::receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame)
+bool AP_WingAngleSensor::receive_frame(uint8_t interface_index, const uavcan::CanFrame &recv_frame)
 {
     union frame_id_t frame_id;
     frame_id.value = recv_frame.id;

@@ -23,14 +23,16 @@
 #include <AP_TinCAN/AP_TinCAN.h>
 
 static const uint8_t AUTOPILOT_NODE_ID = 0;
-static const uint8_t WING_ANGLE_SERVO_NODE_ID = 0x96;
+static const uint8_t WING_ANGLE_SERVO_NODE_ID = 0x6A;
 
 static const uint8_t GET_PWM_OBJ_ADDR = 1;
 static const uint8_t SET_PWM_OBJ_ADDR = 2;
 
-static const uint8_t SEND_PWM_PERIOD_MS = 200;
+static const uint8_t SEND_PWM_PERIOD_MS = 10; // Max Hbridge time?
 
 static const uint8_t MAX_XMIT_RETRIES = 5;
+
+typedef enum { AP_WAS_DIRECTION_EXTEND, AP_WAS_DIRECTION_WITHDRAW, AP_WAS_DIRECTION_NONE } AP_WAS_Direction;
 
 class AP_WingAngleServo : public AP_TinCANClient
 {
@@ -44,19 +46,24 @@ public:
 
     void init();
 
-    bool receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame) override;
+    bool receive_frame(uint8_t interface_index, const uavcan::CanFrame &recv_frame) override;
     bool transmit_slot(uint8_t interface_index) override;
 
-    void set_output_pwm(uint16_t _output_pwm)
+    void set_output(AP_WAS_Direction dir, uint8_t speed )
     {
-        output_pwm = _output_pwm;
+        output_speed = speed;
+        output_direction = dir;
+        output_changed = true;
     }
 
 private:
-    uint16_t    output_pwm = 0;
-    uint32_t    next_pwm_val_send_ms = 0;
-    AP_TinCAN * p_tincan = nullptr;
-    uint8_t     n_xmit_errors_in_burst = 0;
+    /* Should arrange for these to be atomic! */
+    uint8_t          output_speed = 0;
+    AP_WAS_Direction output_direction = AP_WAS_DIRECTION_NONE;
+    bool             output_changed = false;
+    uint32_t         next_pwm_val_send_ms = 0;
+    AP_TinCAN *      p_tincan = nullptr;
+    uint8_t          n_xmit_errors_in_burst = 0;
 
 };
 #endif

@@ -33,7 +33,7 @@ public:
 
     void init();
 
-    bool receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame) override;
+    bool receive_frame(uint8_t interface_index, const uavcan::CanFrame &recv_frame) override;
 
 private:
     uint16_t left_sensor_val;

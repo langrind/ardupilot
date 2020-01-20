@@ -50,7 +50,7 @@ public:
     // send MAVLink telemetry packets
     void send_esc_telemetry_mavlink(uint8_t chan) override;
 
-    bool receive_frame(uint8_t interface_index, uavcan::CanFrame &recv_frame) override;
+    bool receive_frame(uint8_t interface_index, const uavcan::CanFrame &recv_frame) override;
     bool transmit_slot(uint8_t interface_index) override;
 
 

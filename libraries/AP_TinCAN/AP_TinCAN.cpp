@@ -33,7 +33,6 @@
 static const uint16_t TINCAN_SEND_TIMEOUT_US = 500;
 
 extern const AP_HAL::HAL& hal;
-
 #define debug_can(level_debug, fmt, args...) do { if ((level_debug) <= AP::can().get_debug_level_driver(_driver_index)) { printf(fmt, ##args); }} while (0)
 
 static const uint8_t CAN_IFACE_INDEX = 0;
@@ -41,18 +40,12 @@ static const uint8_t CAN_IFACE_INDEX = 0;
 // telemetry definitions
 static const uint32_t TIN_CAN_ESC_UPDATE_MS = 100;
 
+AP_TinCAN *AP_TinCAN::_singleton;
+
 AP_TinCAN::AP_TinCAN()
 {
+    _singleton = this;
     debug_can(2, "TinCAN: constructed\n\r");
-}
-
-AP_TinCAN *AP_TinCAN::get_tcan(uint8_t driver_index)
-{
-    if (driver_index >= AP::can().get_num_drivers() ||
-        AP::can().get_protocol_type(driver_index) != AP_BoardConfig_CAN::Protocol_Type_TinCAN) {
-        return nullptr;
-    }
-    return static_cast<AP_TinCAN*>(AP::can().get_driver(driver_index));
 }
 
 void AP_TinCAN::init(uint8_t driver_index, bool enable_filters)
@@ -87,12 +80,13 @@ void AP_TinCAN::init(uint8_t driver_index, bool enable_filters)
 
     // allocate array of clients, fixed maximum.
 
+#ifndef TINCAN_IN_UAVCAN
     // start calls to loop in separate thread
     if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_TinCAN::loop, void), _thread_name, 4096, AP_HAL::Scheduler::PRIORITY_MAIN, 1)) {
         debug_can(1, "TinCAN: couldn't create thread\n\r");
         return;
     }
-
+#endif
     _initialized = true;
 
     debug_can(2, "TinCAN: init done\n\r");
@@ -100,13 +94,10 @@ void AP_TinCAN::init(uint8_t driver_index, bool enable_filters)
     return;
 }
 
+#ifndef TINCAN_IN_UAVCAN
 // loop to service CAN RX and let clients send
 void AP_TinCAN::loop()
 {
-    //const uint32_t timeout_us = MIN(AP::scheduler().get_loop_period_us(), TINCAN_SEND_TIMEOUT_US);
-
-    uint64_t one_millisec_us = AP_HAL::micros64() + 1000;
-
     while (true) {
         if (!_initialized) {
             // if not initialised wait 2ms
@@ -134,6 +125,24 @@ void AP_TinCAN::loop()
         }
     }
 }
+#endif
+
+#ifdef TINCAN_IN_UAVCAN
+// When TinCAN is not in its own thread, give its clients a chance to send on the bus
+// We are trusting that UAVCAN calls us once per millisec, not checking
+void AP_TinCAN::one_ms_tick()
+{
+    if (!_initialized) {
+        return;
+    }
+
+    for (int i = 0; i < ARRAY_SIZE(client_array); i++ ) {
+        if (client_array[i]) {
+            client_array[i]->transmit_slot(CAN_IFACE_INDEX);
+        }
+    }
+}
+#endif
 
 // write frame on CAN bus
 bool AP_TinCAN::write_frame(uavcan::CanFrame &out_frame, uavcan::MonotonicTime timeout)
@@ -156,6 +165,23 @@ bool AP_TinCAN::write_frame(uavcan::CanFrame &out_frame, uavcan::MonotonicTime t
     return (_can_driver->getIface(CAN_IFACE_INDEX)->send(out_frame, timeout, uavcan::CanIOFlagAbortOnError) == 1);
 }
 
+#ifdef TINCAN_IN_UAVCAN
+bool AP_TinCAN::handle_received_frame(const uavcan::CanFrame& can_frame)
+{
+    bool consumed = false;
+
+    for (int i = 0; i < ARRAY_SIZE(client_array); i++) {
+        if (client_array[i] ) {
+            if (!consumed || client_array[i]->is_greedy(CAN_IFACE_INDEX) ) {
+                if (client_array[i]->receive_frame(CAN_IFACE_INDEX, can_frame) ) {
+                    consumed = true;
+                }
+            }
+        }
+    }
+    return consumed;
+}
+#else
 void AP_TinCAN::do_receive()
 {
     uavcan::CanFrame recv_frame;
@@ -164,19 +190,7 @@ void AP_TinCAN::do_receive()
     uavcan::MonotonicTime timeout = uavcan::MonotonicTime::fromUSec(AP_HAL::micros64() + 1000);
 
     while (read_frame(recv_frame, timeout)) {
-        bool consumed = false;
-
-        for (int i = 0; i < ARRAY_SIZE(client_array); i++) {
-            if (client_array[i] ) {
-                if (!consumed || client_array[i]->is_greedy(CAN_IFACE_INDEX) ) {
-                    if (client_array[i]->receive_frame(CAN_IFACE_INDEX, recv_frame) ) {
-                        consumed = true;
-                    }
-                }
-            }
-        }
-
-        // Should have a counter for received but unconsumed CAN messages, because that shouldn't happen
+        handle_received_frame(recv_frame);
     }
 }
 
@@ -201,6 +215,7 @@ bool AP_TinCAN::read_frame(uavcan::CanFrame &recv_frame, uavcan::MonotonicTime t
     // read frame and return success
     return (_can_driver->getIface(CAN_IFACE_INDEX)->receive(recv_frame, time, utc_time, flags) == 1);
 }
+#endif
 
 // called from SRV_Channels
 void AP_TinCAN::update()
