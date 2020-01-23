@@ -28,7 +28,7 @@ bool AP_WingAngleSensor::receive_frame(uint8_t interface_index, const uavcan::Ca
     union frame_id_t frame_id;
     frame_id.value = recv_frame.id;
 
-    if (frame_id.object_address != 11 && frame_id.source_id != 0x69) {
+    if (frame_id.object_address != 11 || frame_id.source_id != 0x69) {
         return false;
     }
 
