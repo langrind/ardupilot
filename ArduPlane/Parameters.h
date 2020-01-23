@@ -342,6 +342,12 @@ public:
         k_param_mixing_offset,
         k_param_dspoiler_rud_rate,
 
+#if TAC_TILTWING == ENABLED
+        //
+        // TAC stuff
+        k_param_aircraft_mode = 250,
+        k_param_wingpos,
+#endif
         k_param_logger = 253, // Logging Group
 
         // 254,255: reserved

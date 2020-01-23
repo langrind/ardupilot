@@ -207,6 +207,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #if OSD_ENABLED == ENABLED
     SCHED_TASK(publish_osd_info, 1, 10),
 #endif
+#if TAC_TILTWING == ENABLED
+    SCHED_TASK_CLASS(AP_WingPos, &copter.wingpos, periodic_activity,          100,  150),
+#endif
 };
 
 constexpr int8_t Copter::_failsafe_priorities[7];

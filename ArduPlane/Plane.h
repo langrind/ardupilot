@@ -85,6 +85,7 @@
 #include <AP_Gripper/AP_Gripper.h>
 #include <AP_Landing/AP_Landing.h>
 #include <AP_LandingGear/AP_LandingGear.h>     // Landing Gear library
+#include <AP_WingPos/AP_WingPos.h>
 
 #include "GCS_Mavlink.h"
 #include "GCS_Plane.h"
@@ -767,6 +768,11 @@ private:
 
     // support for transmitter tuning
     AP_Tuning_Plane tuning;
+
+#if TAC_TILTWING == ENABLED
+    // wing control
+    AP_WingPos wingpos;
+#endif
 
     static const struct LogStructure log_structure[];
 

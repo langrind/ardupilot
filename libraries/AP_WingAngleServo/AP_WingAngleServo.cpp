@@ -9,8 +9,11 @@
 #define CAN_READ_16(buffer, offset) (be16toh(*(uint16_t *)&(buffer)[(offset)]))
 #define CAN_WRITE_16(buffer, offset, value) ((buffer)[(offset)] = be16toh(value))
 
+AP_WingAngleServo * AP_WingAngleServo::_singleton;
+
 AP_WingAngleServo::AP_WingAngleServo()
 {
+    _singleton = this;
 }
 
 void AP_WingAngleServo::init()
@@ -44,17 +47,7 @@ bool AP_WingAngleServo::transmit_slot(uint8_t interface_index)
         return false;
     }
 
-    if (!output_changed) {
-        /* schedule next send */
-        next_pwm_val_send_ms += SEND_PWM_PERIOD_MS;
-        return false;
-    }
-
-#if 0
-    if (hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED) {
-        output_pwm = 0;
-    }
-#endif
+    /* Could make this protocol use the 11-bit header instead? */
     frame_id_t id = { {
             .object_address = SET_PWM_OBJ_ADDR,
             .destination_id = WING_ANGLE_SERVO_NODE_ID,
@@ -64,10 +57,7 @@ bool AP_WingAngleServo::transmit_slot(uint8_t interface_index)
         }
     };
 
-    //uint8_t can_data[2];
-    //CAN_WRITE_16(can_data, 0, output_pwm);
-
-    uavcan::CanFrame frame { (id.value), 0, 0 };
+    uavcan::CanFrame frame { (id.value | uavcan::CanFrame::FlagEFF), nullptr, 0 };
     frame.data[0] = output_direction;
     frame.data[1] = output_speed;
     frame.dlc = 2;

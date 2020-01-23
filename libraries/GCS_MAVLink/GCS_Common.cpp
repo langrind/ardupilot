@@ -42,6 +42,7 @@
 #include <AP_EFI/AP_EFI.h>
 #include <AP_Proximity/AP_Proximity.h>
 #include <AP_TinCAN/AP_TinCAN.h>
+#include <AP_WingPos/AP_WingPos.h>
 
 #include <stdio.h>
 

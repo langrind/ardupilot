@@ -1084,6 +1084,12 @@ const AP_Param::Info Plane::var_info[] = {
     GOBJECT(osd, "OSD", AP_OSD),
 #endif
 
+#if TAC_TILTWING == ENABLED
+    // @Group: WINGPOS
+    // @Path: ../libraries/AP_WingPos/AP_WingPos.cpp
+    GOBJECT(wingpos, "WINGPOS", AP_WingPos),
+#endif
+
     // @Group: TKOFF_
     // @Path: mode_takeoff.cpp
     GOBJECT(mode_takeoff, "TKOFF_", ModeTakeoff),

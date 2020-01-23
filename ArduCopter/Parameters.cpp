@@ -711,6 +711,12 @@ const AP_Param::Info Copter::var_info[] = {
     GOBJECT(osd, "OSD", AP_OSD),
 #endif
 
+#if TAC_TILTWING == ENABLED
+    // @Group: WINGPOS
+    // @Path: ../libraries/AP_WingPos/AP_WingPos.cpp
+    GOBJECT(wingpos, "WINGPOS", AP_WingPos),
+#endif
+
     // @Group:
     // @Path: Parameters.cpp
     GOBJECT(g2, "",  ParametersG2),
