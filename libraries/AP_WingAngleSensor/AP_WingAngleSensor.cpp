@@ -8,6 +8,8 @@
 
 #define CAN_READ_16(buffer, offset) (be16toh(*(uint16_t *)&(buffer)[offset]))
 
+AP_WingAngleSensor *AP_WingAngleSensor::_singleton;
+
 AP_WingAngleSensor::AP_WingAngleSensor()
 {
     transmit_period_ms = 0;
@@ -16,6 +18,8 @@ AP_WingAngleSensor::AP_WingAngleSensor()
 
 void AP_WingAngleSensor::init()
 {
+    _singleton = this;
+
     AP_TinCAN * tincan = AP_TinCAN::get_singleton();
     if (tincan) {
         // printf("%s: found tincan, adding us\r\n", __PRETTY_FUNCTION__);
@@ -32,9 +36,10 @@ bool AP_WingAngleSensor::receive_frame(uint8_t interface_index, const uavcan::Ca
         return false;
     }
 
-    left_sensor_val = CAN_READ_16(recv_frame.data, 0);
-    right_sensor_val = CAN_READ_16(recv_frame.data, 2);
-    last_sensor_update_us = AP_HAL::micros64();
+    _left_sensor_val = CAN_READ_16(recv_frame.data, 0);
+    _right_sensor_val = CAN_READ_16(recv_frame.data, 2);
+    _last_sensor_update_us = AP_HAL::micros64();
+
     return true;
 }
 

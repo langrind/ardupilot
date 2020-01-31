@@ -28,11 +28,17 @@ static const uint8_t WING_ANGLE_SERVO_NODE_ID = 0x6A;
 static const uint8_t SET_PWM_OBJ_ADDR = 1;
 static const uint8_t GET_PWM_OBJ_ADDR = 2;
 
-static const uint8_t SEND_PWM_PERIOD_MS = 100; // Max Hbridge time is 10, not sure why? going slower for now
+// Max Hbridge time is 10, not sure why? going even slower for now, just to keep CAN traffic low
+// so it's easier to watch traces
+static const uint8_t SEND_PWM_PERIOD_MS = 100;
 
 static const uint8_t MAX_XMIT_RETRIES = 5;
 
-typedef enum { AP_WASERVO_DIRECTION_EXTEND, AP_WASERVO_DIRECTION_WITHDRAW, AP_WASERVO_DIRECTION_NONE } AP_WASERVO_Direction;
+typedef enum {
+    AP_WASERVO_DIRECTION_EXTEND,
+    AP_WASERVO_DIRECTION_RETRACT,
+    AP_WASERVO_DIRECTION_NONE,
+} AP_WASERVO_Direction;
 
 class AP_WingAngleServo : public AP_TinCANClient
 {

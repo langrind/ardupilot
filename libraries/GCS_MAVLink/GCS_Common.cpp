@@ -4600,6 +4600,12 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
         break;
     }
 
+    case MSG_WING_ANGLE: {
+        AP_WingPos * wp = AP_WingPos::instance();
+        wp->send_mavlink(chan);
+        break;
+    }
+
     default:
         // try_send_message must always at some stage return true for
         // a message, or we will attempt to infinitely retry the

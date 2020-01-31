@@ -31,14 +31,24 @@ public:
     AP_WingAngleSensor(const AP_WingAngleSensor &other) = delete;
     AP_WingAngleSensor &operator=(const AP_WingAngleSensor &) = delete;
 
+    // get singleton instance
+    static AP_WingAngleSensor *get_singleton(void) {
+        return _singleton;
+    }
+
     void init();
 
     bool receive_frame(uint8_t interface_index, const uavcan::CanFrame &recv_frame) override;
 
+    uint16_t get_left_sensor_val() { return _left_sensor_val; }
+    uint16_t get_right_sensor_val() { return _right_sensor_val; }
+
 private:
-    uint16_t left_sensor_val;
-    uint16_t right_sensor_val;
-    uint64_t last_sensor_update_us;
+    uint16_t _left_sensor_val;
+    uint16_t _right_sensor_val;
+    uint64_t _last_sensor_update_us;
+
+    static AP_WingAngleSensor *_singleton;
 };
 #endif
 
