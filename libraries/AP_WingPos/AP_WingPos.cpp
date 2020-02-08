@@ -105,6 +105,12 @@ const AP_Param::GroupInfo AP_WingPos::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_RMIN", 13, AP_WingPos, _rightSensorMin, 0),
 
+    // @Param: TYPE
+    // @DisplayName: Wing Angle Calibration Switch
+    // @Description: RC Channel used to start/stop Wing Angle calibration
+    // @User: Standard
+    AP_GROUPINFO("_CALRC_CH", 14, AP_WingPos, _calRcChan, 6),
+
     AP_GROUPEND
 };
 
@@ -315,16 +321,19 @@ void AP_WingPos::drive_wing_pos_stop()
     drive_wing_pos(AP_WASERVO_DIRECTION_NONE, 0);
 }
 
-AP_WingPos_SwitchPosition AP_WingPos::read_wp_switch()
+// This needs improvement. The values are chosen by observation
+// of what happens with my FrSky controller. I don't know how
+// to choose values that are guaranteed to be correct if something
+// should change, and I don't know how to choose values such that
+// signal errors are mininimized
+AP_WingPos_SwitchPosition AP_WingPos::read_switch(int8_t rcChan)
 {
-    if (_manualRcChan == 0) {
-        // Manual control of wing disabled by configuration
+    if (rcChan == 0) {
+        // The switch is not enabled by configuration
         return WP_SWITCH_INVALID;
     }
 
-    int8_t rcChan = _manualRcChan - 1;
-
-    uint16_t pulsewidth = RC_Channels::get_radio_in(rcChan);
+    uint16_t pulsewidth = RC_Channels::get_radio_in(rcChan-1);
     if (pulsewidth < 900 || pulsewidth > 2200) {
         return WP_SWITCH_INVALID;
     }
@@ -505,187 +514,222 @@ void AP_WingPos::calibration_state_machine()
 }
 
 //
-// Manual Control State Machine responds to the 3-position switch allowing the user to:
-// 1) Move the wing up or down
-// 2) Stop moving the wing
-// 3) Enter calibration mode by flipping the switch quickly back and forth multiple times
-//    and then allowing it to rest in the up or down (not middle) position
-
+// Manual Control State Machine responds to two 3-position switches, allowing the user to:
+// 1) Move the wing up or down with the "man" switch
+// 2) Stop moving the wing with the "man" switch
+// 3) When disarmed, enter calibration mode with the "cal" switch
+// 4) Exit calibration mode with the "cal" switch or the man switch
+//
 // States:
-// * INIT - start in this state, only come back to it we get an invalid switch reading
-// * STARTUP_HOLDDOWN - making sure we don't drive the wing when someone powers up w/switch in active position
+// * INIT - start in this state
+// * STARTUP_HOLDDOWN - making sure we don't drive the wing with previous switch position.
 // * NOT_DRIVING - stopped, but ready to start moving if the user switches the switch
 // * DRIVING - driving one way or the other
-// * FAST_TOGGLE - user is flipping the switch rapidly, indicating a desire to calibrate
-// * CALIBRATE_WAIT - we are going to start calibrating as soon as the user stops moving the switch
-//   (but if they let it rest in the middle, we won't start calibrating)
 // * CALIBRATING - calibrating
-// * CALIBRATION_DONE - calibration is done, waiting for the user to move the switch back to the
+// * CALIBRATION_DONE - calibration is done, waiting for the user to move the switch(es) back to the
 //   middle
-void AP_WingPos::manual_control_state_machine(AP_WingPos_SwitchPosition curSwPos, uint32_t now)
+//
+// This routine is called periodically with the latest switch values. Therefore to
+// simplify the state machine (at least when disarmed) we can always stop wing movement
+// and return to init state. The user will have to return both switches to middle position
+// before any further manual wing pos control can be exerted
+void AP_WingPos::manual_control_switches_state_machine(AP_WingPos_SwitchPosition curSwPos,
+                                                       AP_WingPos_SwitchPosition curCalSwPos,
+                                                       bool disarmed)
 {
-    switch (_manualControlState) {
-    case AP_WINGPOS_MC_STATE_INIT:
-        switch (curSwPos) {
-        case WP_SWITCH_TOP:
-        case WP_SWITCH_BOTTOM:
-            _manualControlState = AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN;
-            break;
-        case WP_SWITCH_MIDDLE:
-            _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
-            break;
-        default:
-            break;
-        }
-        break;
-
-    case AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN:
-        if (curSwPos == WP_SWITCH_MIDDLE) {
-            _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
-        }
-        break;
-
-    case AP_WINGPOS_MC_STATE_NOT_DRIVING:
-        if (curSwPos == _lastSwitchPos || curSwPos == WP_SWITCH_INVALID) {
-            break;
-        }
-
-        // switch has changed, go to fast toggle
-        _manualControlState = AP_WINGPOS_MC_STATE_FAST_TOGGLE;
-        _fastToggleCount = 0;
-        break;
-
-    case AP_WINGPOS_MC_STATE_DRIVING:
-        if (curSwPos == _lastSwitchPos) {
-            break;
-        }
-        switch (curSwPos) {
-        case WP_SWITCH_TOP:
-        case WP_SWITCH_BOTTOM:
-            // somehow we skipped the middle position, so let's go into fast-toggle
-            // and stop moving
-            _manualControlState = AP_WINGPOS_MC_STATE_FAST_TOGGLE;
-            _fastToggleCount = 0;
-            drive_wing_pos_stop();
-            break;
-        default:
-        case WP_SWITCH_MIDDLE:
-        case WP_SWITCH_INVALID:
-            drive_wing_pos_stop();
-            _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
-            break;
-        }
-        break;
-
-    case AP_WINGPOS_MC_STATE_FAST_TOGGLE:
-        if (curSwPos == _lastSwitchPos) {
-            if (now - _lastSwitchPosChangeMs > FAST_TOGGLE_THRESH_MS ) {
-                // we've stopped for long enough to exit fast toggle, and we haven't
-                // seen enough changes to enter CALIBRATE mode. If the fast toggle
-                // count is 0, then the user simply switched the switch, in which
-                // case respond appropriately, otherwise, stop, and maybe initiate
-                // hold down to force user to switch to stop position before proceeding
-                if (_fastToggleCount) {
-                    drive_wing_pos_stop();
-                    if (curSwPos == WP_SWITCH_MIDDLE) {
-                        _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
-                    } else {
-                        _manualControlState = AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN;
-                    }
-                } else {
-                    switch (curSwPos) {
-                    case WP_SWITCH_BOTTOM:
-                        drive_wing_pos_horizontal();
-                        _manualControlState = AP_WINGPOS_MC_STATE_DRIVING;
-                        break;
-                    case WP_SWITCH_TOP:
-                        drive_wing_pos_vertical();
-                        _manualControlState = AP_WINGPOS_MC_STATE_DRIVING;
-                        break;
-                    case WP_SWITCH_MIDDLE:
-                        drive_wing_pos_stop();
-                        _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
-                        break;
-                    case WP_SWITCH_INVALID:
-                        drive_wing_pos_stop();
-                        _manualControlState = AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN;
-                        break;
-                    }
-                }
+    if (disarmed) {
+        switch (_manualControlState) {
+        case AP_WINGPOS_MC_STATE_INIT:
+        case AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN:
+            if (curCalSwPos == WP_SWITCH_MIDDLE && curSwPos == WP_SWITCH_MIDDLE ) {
+                _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
+            } else {
+                _manualControlState = AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN;
             }
-        } else {
-            // another change, and we are still in fast toggle, so let's see
-            // if this is enough changes to enter calibrate mode
-            if (++_fastToggleCount > FAST_TOGGLE_COUNT_THRESHOLD ) {
-                // It's enough changes. Wait for the user to leave the switch
-                // at the desired place (middle means forget about it, top
-                // or bottom means calibrate)
-                _manualControlState = AP_WINGPOS_MC_STATE_CALIBRATE_WAIT;
-            }
-        }
-        break;
+            break;
 
-    case AP_WINGPOS_MC_STATE_CALIBRATE_WAIT:
-        if (curSwPos == _lastSwitchPos) {
-            if (now - _lastSwitchPosChangeMs > FAST_TOGGLE_THRESH_MS ) {
-                switch (curSwPos) {
-                case WP_SWITCH_TOP:
+        case AP_WINGPOS_MC_STATE_NOT_DRIVING:
+            if ((curCalSwPos == _lastCalSwitchPos || curCalSwPos == WP_SWITCH_INVALID)  &&
+                (curSwPos == _lastSwitchPos || curSwPos == WP_SWITCH_INVALID)) {
+                break;
+            }
+
+            // a switch has changed - in disarmed state we give priority to cal switch
+            if (curCalSwPos != _lastCalSwitchPos) {
+                switch (curCalSwPos) {
                 case WP_SWITCH_BOTTOM:
+                case WP_SWITCH_TOP:
                     start_calibration();
                     _manualControlState = AP_WINGPOS_MC_STATE_CALIBRATING;
                     break;
-                default:
                 case WP_SWITCH_MIDDLE:
                 case WP_SWITCH_INVALID:
+                    // unexpected
+                    drive_wing_pos_stop();
+                    _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+                    break;
+                }
+            } else {
+                switch (curSwPos) {
+                case WP_SWITCH_BOTTOM:
+                    drive_wing_pos_horizontal();
+                    _manualControlState = AP_WINGPOS_MC_STATE_DRIVING;
+                    break;
+                case WP_SWITCH_TOP:
+                    drive_wing_pos_vertical();
+                    _manualControlState = AP_WINGPOS_MC_STATE_DRIVING;
+                    break;
+                case WP_SWITCH_MIDDLE:
                     drive_wing_pos_stop();
                     _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
                     break;
+                case WP_SWITCH_INVALID:
+                    drive_wing_pos_stop();
+                    _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+                    break;
                 }
             }
-        }
-        break;
+            break;
 
-    case AP_WINGPOS_MC_STATE_CALIBRATING:
-        if (curSwPos != _lastSwitchPos) {
+        case AP_WINGPOS_MC_STATE_DRIVING:
+            // if we are driving the wing with man switch, ignore cal switch
+            // if man switch hasn't changed, nothing to do
+            if (curSwPos == _lastSwitchPos) {
+                break;
+            }
+
+            // In this state, if the switch changed in any way, we are stopping the wing
+            drive_wing_pos_stop();
+
+            switch (curSwPos) {
+            case WP_SWITCH_TOP:
+            case WP_SWITCH_BOTTOM:
+            case WP_SWITCH_INVALID:
+                // bad input or somehow we skipped the middle position, so go into init state - user
+                // must return both switches to middle before further switch input accepted
+                _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+                break;
+            case WP_SWITCH_MIDDLE:
+                _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
+                break;
+            }
+            break;
+
+        case AP_WINGPOS_MC_STATE_CALIBRATING:
+            if (curSwPos != _lastSwitchPos || curCalSwPos != _lastCalSwitchPos ) {
+                cancel_calibration();
+                _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+            }
+            break;
+
+        case AP_WINGPOS_MC_STATE_CALIBRATION_FINISHED:
+            if (curSwPos == WP_SWITCH_MIDDLE) {
+                _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+            }
+            break;
+        }
+    } else {
+        switch (_manualControlState) {
+        case AP_WINGPOS_MC_STATE_INIT:
+        case AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN:
+            if (curSwPos == WP_SWITCH_MIDDLE ) {
+                _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
+            } else {
+                _manualControlState = AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN;
+            }
+            break;
+
+        case AP_WINGPOS_MC_STATE_NOT_DRIVING:
+            if (curSwPos == _lastSwitchPos || curSwPos == WP_SWITCH_INVALID) {
+                break;
+            }
+
+            // man switch has changed
+            switch (curSwPos) {
+            case WP_SWITCH_BOTTOM:
+                drive_wing_pos_horizontal();
+                _manualControlState = AP_WINGPOS_MC_STATE_DRIVING;
+                break;
+            case WP_SWITCH_TOP:
+                drive_wing_pos_vertical();
+                _manualControlState = AP_WINGPOS_MC_STATE_DRIVING;
+                break;
+            case WP_SWITCH_MIDDLE:
+                drive_wing_pos_stop();
+                _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
+                break;
+            case WP_SWITCH_INVALID:
+                drive_wing_pos_stop();
+                _manualControlState = AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN;
+                break;
+            }
+            break;
+
+        case AP_WINGPOS_MC_STATE_DRIVING:
+            // if man switch hasn't changed, nothing to do
+            if (curSwPos == _lastSwitchPos) {
+                break;
+            }
+
+            // No matter what happened with the switch, we are stopping the wing
+            drive_wing_pos_stop();
+
+            switch (curSwPos) {
+            case WP_SWITCH_TOP:
+            case WP_SWITCH_BOTTOM:
+            case WP_SWITCH_INVALID:
+                // bad input or somehow we skipped the middle position, so go into init state - user
+                // must return switch to middle before further switch input accepted
+                _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+                break;
+            case WP_SWITCH_MIDDLE:
+                _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
+                break;
+            }
+            break;
+
+        case AP_WINGPOS_MC_STATE_CALIBRATING:
+            // We can't be here, and yet here we are. Stop calibrating
             cancel_calibration();
-            _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
-        }
-        break;
+            _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+            break;
 
-    case AP_WINGPOS_MC_STATE_CALIBRATION_FINISHED:
-        if (curSwPos == WP_SWITCH_MIDDLE) {
-            _manualControlState = AP_WINGPOS_MC_STATE_NOT_DRIVING;
+        case AP_WINGPOS_MC_STATE_CALIBRATION_FINISHED:
+            _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+            break;
         }
-        break;
     }
 }
 
-// Manual control of wing position from a switch on the RC is controlled
-// here. Manual control is not allowed when armed, since the autopilot
-// controls it according to transition algo. (Is this even true?)
-// In any case, that's not enforced here, it's enforced in the caller.
+// Manual control of wing position from switches on the RC is controlled
+// here. Manual control is allowed when armed, but not calibration.
+// Have yet to work out the details of making manual and auto-control
+// coexist.
 //
 // There is a three-position switch with these meanings:
 //  up/away from user - wing moves toward horizontal.
 //  middle position - wing stops moving
 //  down/toward user - wing movers toward vertical
 //
-// Initially, we don't move the wing if the switch is not in the middle
+// Another three-position switch with these meanings:
+//  up/away from user - start cal
+//  middle position - stop cal
+//  down/toward user - start cal
+//
+// Initially, we don't move the wing if the switches aren't in the middle
 // position. The first move is not allowed until we see a transition
 // from middle to not-middle. This way, the wing can't move unless
 // the operator is actively directing it to.
 //
-void AP_WingPos::manual_control_wing_pos()
+void AP_WingPos::manual_control_wing_pos(bool disarmed)
 {
-    AP_WingPos_SwitchPosition curSwPos = read_wp_switch();
-    const uint32_t now = AP_HAL::millis();
+    AP_WingPos_SwitchPosition curSwPos    = read_switch(_manualRcChan);
+    AP_WingPos_SwitchPosition curCalSwPos = disarmed ? read_switch(_calRcChan) : WP_SWITCH_INVALID;
 
-    manual_control_state_machine(curSwPos, now);
+    manual_control_switches_state_machine(curSwPos, curCalSwPos, disarmed);
 
-    if (_lastSwitchPos != curSwPos) {
-        _lastSwitchPosChangeMs = now;
-    }
     _lastSwitchPos = curSwPos;
+    _lastCalSwitchPos = curCalSwPos;
 }
 
 float AP_WingPos::calculate_wing_angle()
@@ -722,9 +766,8 @@ void AP_WingPos::periodic_activity()
      * Also, do we want to allow manual control even when armed? I think we do, and
      * we should incorporate safety_switch_state() into our state machine.
      */
-    if (hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED) {
-        manual_control_wing_pos();
-    }
+    bool disarmed = hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED;
+    manual_control_wing_pos(disarmed);
 
     if (_manualControlState == AP_WINGPOS_MC_STATE_CALIBRATING) {
         calibration_state_machine();

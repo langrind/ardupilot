@@ -66,8 +66,6 @@ typedef enum {
     AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN,
     AP_WINGPOS_MC_STATE_NOT_DRIVING,
     AP_WINGPOS_MC_STATE_DRIVING,
-    AP_WINGPOS_MC_STATE_FAST_TOGGLE,
-    AP_WINGPOS_MC_STATE_CALIBRATE_WAIT,
     AP_WINGPOS_MC_STATE_CALIBRATING,
     AP_WINGPOS_MC_STATE_CALIBRATION_FINISHED,
 } AP_WingPos_ManualControl_State;
@@ -145,6 +143,7 @@ private:
     AP_Int16    _actmin;        // minumum PWM value for WA actuator
     AP_Int16    _ctrlmodeswtch; // initial value of Control Mode Switch (for use when testing w/o an RC)
     AP_Int8     _manualRcChan;  // RC Channel to use to manually control wing angle
+    AP_Int8     _calRcChan;     // RC Channel to use to manually initiate wing angle calibration
     AP_Int16    _leftSensorMax; // max value observed in calibration
     AP_Int16    _leftSensorMin; // min value observed in calibration
     AP_Int16    _rightSensorMax;// max value observed in calibration
@@ -159,9 +158,11 @@ private:
     void        init();
 
     // Manual Control Switch on RC Xmtr:
-    void                      manual_control_wing_pos();
-    void                      manual_control_state_machine(AP_WingPos_SwitchPosition curSwPos, uint32_t now);
-    AP_WingPos_SwitchPosition read_wp_switch();
+    void manual_control_wing_pos(bool disarmed);
+    void manual_control_switches_state_machine(AP_WingPos_SwitchPosition curManSwPos,
+                                               AP_WingPos_SwitchPosition curCalSwPos,
+                                               bool disarmed);
+    AP_WingPos_SwitchPosition read_switch(int8_t);
 
     // set servo outputs
     void drive_wing_pos(AP_WASERVO_Direction direction, uint8_t speed);
@@ -185,8 +186,7 @@ private:
 
     // Manual Control Switch on RC Xmtr:
     AP_WingPos_SwitchPosition      _lastSwitchPos = WP_SWITCH_INVALID;
-    uint32_t                       _lastSwitchPosChangeMs = 0; // last time it actually changed
-    uint8_t                        _fastToggleCount = 0;
+    AP_WingPos_SwitchPosition      _lastCalSwitchPos = WP_SWITCH_INVALID;
     AP_WingPos_ManualControl_State _manualControlState = AP_WINGPOS_MC_STATE_INIT;
 
     // Calibration Procedure (Find sensor readings at extremes of wing position )
