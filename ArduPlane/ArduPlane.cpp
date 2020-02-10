@@ -111,7 +111,7 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
 #endif
     SCHED_TASK(update_dynamic_notch,   50,    200),
 #if TAC_TILTWING == ENABLED
-    SCHED_TASK_CLASS(AP_WingPos, &plane.wingpos, periodic_activity,          10,  150),
+    SCHED_TASK_CLASS(AP_WingPos, &plane.wingpos, periodic_activity,          100,  150),
 #endif
 };
 

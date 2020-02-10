@@ -20,7 +20,8 @@
 #define WP_CAL_TICK_MS                  100
 #define AP_WINGPOS_SENSOR_EPSILON       8
 
-#define INVALID_WP_DEGREES  (-90.0)
+// Using 361 is convenient because you can do arithmetic compare (>= INVALID_WP_DEGREES)
+#define INVALID_WP_DEGREES              361.0
 
 enum wa_type {
     WA_TYPE_FLOAT,
@@ -77,6 +78,12 @@ typedef enum {
     WP_CAL_EXTEND,
 } AP_Cal_State;
 
+typedef enum {
+    WP_SP_SOURCE_NONE,
+    WP_SP_SOURCE_MAVLINK,
+    WP_SP_SOURCE_AUTOPILOT,
+} AP_WingPos_Setpoint_Source;
+
 /// @class	AP_WingPos
 /// @brief	Class managing the wing position
 class AP_WingPos {
@@ -124,6 +131,12 @@ public:
 
     /// get_param - return value of identified param
     bool get_param(enum wa_param, bool *);
+
+    // MAVlink input
+    void handle_message(const mavlink_channel_t chan, const mavlink_message_t &msg);
+
+    // wing angle setpoint
+    void set_wing_angle_setpoint(AP_WingPos_Setpoint_Source source, float value);
 
     static const struct AP_Param::GroupInfo        var_info[];
 
@@ -181,6 +194,7 @@ private:
     uint16_t raw_sensor_difference(uint16_t val1, uint16_t val2);
 
     float    calculate_wing_angle();
+    void     control_wing_angle();
 
     // internal variables
 
@@ -196,6 +210,13 @@ private:
     uint32_t                       _lastSensorChangeTime = 0;
     uint32_t                       _calTickMs = 0;
 
+    // MAVlink commands
+    WING_ANGLE_CMD                 _lastMavlinkWingAngleCmd;
+
+    // Wing Angle setpoint
+    float                          _wingAngleSetpoint;
+    AP_WingPos_Setpoint_Source     _wingAngleSetpointSource;
+    uint32_t                       _wingAngleSetpointTime;
 };
 
 AP_WingPos &wingpos();

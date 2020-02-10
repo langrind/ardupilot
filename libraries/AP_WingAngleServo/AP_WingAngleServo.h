@@ -28,9 +28,8 @@ static const uint8_t WING_ANGLE_SERVO_NODE_ID = 0x6A;
 static const uint8_t SET_PWM_OBJ_ADDR = 1;
 static const uint8_t GET_PWM_OBJ_ADDR = 2;
 
-// Max Hbridge time is 10, not sure why? going even slower for now, just to keep CAN traffic low
-// so it's easier to watch traces
-static const uint8_t SEND_PWM_PERIOD_MS = 100;
+// 50 Hz motor update rate. Try 40 at some point, it should be sufficient
+static const uint8_t SEND_PWM_PERIOD_MS = 20;
 
 static const uint8_t MAX_XMIT_RETRIES = 5;
 

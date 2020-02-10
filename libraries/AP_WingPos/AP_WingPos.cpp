@@ -758,6 +758,99 @@ float AP_WingPos::calculate_wing_angle()
     return (left_degrees + right_degrees) / 2;
 }
 
+void AP_WingPos::set_wing_angle_setpoint(AP_WingPos_Setpoint_Source source, float value)
+{
+    if (source == WP_SP_SOURCE_AUTOPILOT && _wingAngleSetpointSource == WP_SP_SOURCE_MAVLINK) {
+        // MAVlink is overriding Autopilot
+        return;
+    }
+    //printf("%s: %d %.1f\n\r", __FUNCTION__, source, value);
+
+    _wingAngleSetpointTime = AP_HAL::millis();
+    _wingAngleSetpointSource = source;
+    _wingAngleSetpoint = value;
+}
+
+void AP_WingPos::handle_message(const mavlink_channel_t chan, const mavlink_message_t &msg)
+{
+    if (msg.msgid != MAVLINK_MSG_ID_WING_ANGLE_CMD) {
+        return;
+    }
+
+    mavlink_wing_angle_cmd_t wing_angle_cmd {};
+    mavlink_msg_wing_angle_cmd_decode(&msg, &wing_angle_cmd);
+
+    // The mavlink message can command two things: calibration or setpoint
+    switch (wing_angle_cmd.command) {
+    case WA_CMD_NONE:
+        break;
+    case WA_CMD_CALIBRATE:
+        // not supported yet
+        break;
+    case WA_CMD_CANCEL_CALIBRATE:
+        // not supported yet
+        break;
+    case WA_CMD_NEW_SETPOINT:
+        switch  (_lastMavlinkWingAngleCmd) {
+        case WA_CMD_NONE:
+        case WA_CMD_NEW_SETPOINT:
+        case WA_CMD_CLEAR_SETPOINT:
+            // set the setpoint_angle to wing_angle_cmd.setpoint_angle;
+            set_wing_angle_setpoint(WP_SP_SOURCE_MAVLINK, wing_angle_cmd.setpoint_angle);
+            break;
+        default:
+            break;
+        }
+        break;
+    case WA_CMD_CLEAR_SETPOINT:
+        _wingAngleSetpointSource = WP_SP_SOURCE_NONE;
+        break;
+    default:
+        break;
+    }
+
+    _lastMavlinkWingAngleCmd = (WING_ANGLE_CMD)wing_angle_cmd.command;
+}
+
+void AP_WingPos::control_wing_angle()
+{
+    AP_WingAngleSensor *sensor = AP_WingAngleSensor::get_singleton();
+    if (sensor) {
+        _left_sensor_value = sensor->get_left_sensor_val();
+        _right_sensor_value = sensor->get_right_sensor_val();
+
+        // Calculate error - diff between current value and setpoint (_wingAngleSetpoint)
+        float degrees = calculate_wing_angle();
+        float error = _wingAngleSetpoint - degrees;
+
+        AP_WASERVO_Direction direction = error > 1 ? AP_WASERVO_DIRECTION_EXTEND :
+            error < -1 ? AP_WASERVO_DIRECTION_RETRACT : AP_WASERVO_DIRECTION_NONE;
+
+        uint8_t speed = 0;
+        if (direction == AP_WASERVO_DIRECTION_NONE) {
+            drive_wing_pos(direction, speed);
+        }
+        else {
+            float abs_error = fabs(error);
+
+            // determine output value by multiplying command range by error
+            //abs_error *= 5;
+            //xabs_error += 40;
+            if ( abs_error >= 255.0) {
+                speed = 255;
+            }
+            else {
+                speed = (uint8_t)abs_error;
+            }
+
+            //printf("%s: %.1f %.1f %s %d\n\r", __FUNCTION__, degrees, error,
+            //       direction == AP_WASERVO_DIRECTION_EXTEND ? "extend" : "retract", speed);
+
+            drive_wing_pos(direction, speed);
+        }
+    }
+}
+
 // Called at 100 Hz or so. (For now, 10 Hz) Can be used to do whatever WingPos needs to do
 void AP_WingPos::periodic_activity()
 {
@@ -770,6 +863,24 @@ void AP_WingPos::periodic_activity()
     manual_control_wing_pos(disarmed);
 
     if (_manualControlState == AP_WINGPOS_MC_STATE_CALIBRATING) {
+
         calibration_state_machine();
+
+    } else if (_manualControlState != AP_WINGPOS_MC_STATE_DRIVING &&
+               _wingAngleSetpointSource != WP_SP_SOURCE_NONE ) {
+
+        control_wing_angle();
     }
+
+    // Subject MAVLink control of wing angle to a timeout
+    if (_wingAngleSetpointSource == WP_SP_SOURCE_MAVLINK ) {
+        if (_wingAngleSetpointTime + 1000 < AP_HAL::millis()) {
+            // MAVLink hasn't given us a setpoint in over one second, allow autopilot to
+            // control wing angle again
+            _wingAngleSetpointSource = WP_SP_SOURCE_NONE;
+        }
+    }
+
 }
+
+

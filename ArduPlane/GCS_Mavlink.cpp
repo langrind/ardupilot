@@ -1330,6 +1330,10 @@ void GCS_MAVLINK_Plane::handleMessage(const mavlink_message_t &msg)
         plane.adsb.handle_message(chan, msg);
         break;
 
+    case MAVLINK_MSG_ID_WING_ANGLE_CMD:
+        plane.wingpos.handle_message(chan, msg);
+        break;
+
     default:
         handle_common_message(msg);
         break;
