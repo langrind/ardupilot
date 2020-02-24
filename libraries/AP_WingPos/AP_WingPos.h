@@ -71,7 +71,6 @@ typedef enum {
     AP_WINGPOS_MC_STATE_CALIBRATION_FINISHED,
 } AP_WingPos_ManualControl_State;
 
-
 typedef enum {
     WP_CAL_INIT,
     WP_CAL_RETRACT,
@@ -102,20 +101,11 @@ public:
 
     void periodic_activity();
 
-    /// recalibrate_wasensors - tell the WA system set to recalibrate the WA sensors (only when unarmed)
-    void recalibrate_wasensors();
-
-    /// recalibrate_all - tell the WA system to recalibrate the WA sensors and RC dial (only when unarmed)
-    void recalibrate_all();
-
     /// wingpos_checks - indicate if it's OK to arm the AC
     bool wingpos_checks(bool);
 
-    /// send_mavlink() - send wing angle info over mavlink - need to find a mavlink message to hold it
+    /// send_mavlink() - send wing angle info over mavlink
     void send_mavlink(mavlink_channel_t chan);
-
-    /// set_wing_to - set the wing angle to the specified angle (0..90)
-    void set_wing_to(float);
 
     /// get_preset_wa - return one of two preset wing angles
     int get_preset_wa(enum wa_presets);
@@ -135,7 +125,7 @@ public:
     // MAVlink input
     void handle_message(const mavlink_channel_t chan, const mavlink_message_t &msg);
 
-    // wing angle setpoint
+    // wing angle setpoint - set the wing angle to the specified angle (0..90)
     void set_wing_angle_setpoint(AP_WingPos_Setpoint_Source source, float value);
 
     static const struct AP_Param::GroupInfo        var_info[];
@@ -168,20 +158,20 @@ private:
     struct param_name_map *find_m_n_p(enum wa_param);
 
     /// init - initialize internal stuff
-    void        init();
+    void      init();
 
     // Manual Control Switch on RC Xmtr:
-    void manual_control_wing_pos(bool disarmed);
-    void manual_control_switches_state_machine(AP_WingPos_SwitchPosition curManSwPos,
-                                               AP_WingPos_SwitchPosition curCalSwPos,
-                                               bool disarmed);
+    void      manual_control_wing_pos(bool disarmed);
+    void      manual_control_switches_state_machine(AP_WingPos_SwitchPosition curManSwPos,
+                                                    AP_WingPos_SwitchPosition curCalSwPos,
+                                                    bool disarmed);
     AP_WingPos_SwitchPosition read_switch(int8_t);
 
     // set servo outputs
-    void drive_wing_pos(AP_WASERVO_Direction direction, uint8_t speed);
-    void drive_wing_pos_horizontal();
-    void drive_wing_pos_vertical();
-    void drive_wing_pos_stop();
+    void     drive_wing_pos(AP_WASERVO_Direction direction, uint8_t speed);
+    void     drive_wing_pos_horizontal();
+    void     drive_wing_pos_vertical();
+    void     drive_wing_pos_stop();
 
     // Calibration Procedure (Find sensor readings at extremes of wing position )
     void     cancel_calibration();
@@ -193,7 +183,7 @@ private:
     void     calibration_state_machine();
     uint16_t raw_sensor_difference(uint16_t val1, uint16_t val2);
 
-    float    calculate_wing_angle();
+    float    calculate_wing_angle(float left_sensor_value, float right_sensor_value);
     void     control_wing_angle();
 
     // internal variables

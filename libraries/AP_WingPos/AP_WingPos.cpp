@@ -146,27 +146,11 @@ AP_WingPos::AP_WingPos()
     init();
 }
 
-/// recalibrate_wasensors - force a recalibration of the WA system
-void AP_WingPos::recalibrate_wasensors()
-{
-}
-
-/// recalibrate_all - force a recalibration of the WA system and RC dial...
-void AP_WingPos::recalibrate_all()
-{
-}
-
 /// wingpos_check - are we allowed to arm? Yes iff current state is ready for an input (and not calibrating)
 bool AP_WingPos::wingpos_checks(bool display_failure)
 {
     return false;
 }
-
-/// set_wing_to - set the wing angle to the specified angle (0..90)
-void AP_WingPos::set_wing_to(float wa)
-{
-}
-
 
 /// get_preset_wa - return one of two preset wing angles. selector == 0 ==> airplane angle, 1 ==> begin of departure transition angle
 int AP_WingPos::get_preset_wa(enum wa_presets selector)
@@ -193,7 +177,7 @@ float AP_WingPos::get_wa()
     if (sensor) {
         _left_sensor_value = sensor->get_left_sensor_val();
         _right_sensor_value = sensor->get_right_sensor_val();
-        degrees = calculate_wing_angle();
+        degrees = calculate_wing_angle(_left_sensor_value, _right_sensor_value);
     }
     return degrees;
 }
@@ -283,7 +267,7 @@ void AP_WingPos::send_mavlink(mavlink_channel_t chan)
     if (sensor) {
         _left_sensor_value = sensor->get_left_sensor_val();
         _right_sensor_value = sensor->get_right_sensor_val();
-        float degrees = calculate_wing_angle();
+        float degrees = calculate_wing_angle(_left_sensor_value, _right_sensor_value);
         mavlink_msg_wing_angle_send(chan, degrees);
     }
 }
@@ -441,6 +425,7 @@ uint16_t AP_WingPos::raw_sensor_difference(uint16_t val1, uint16_t val2)
     return val2 - val1;
 }
 
+// read and record sensor values
 // return true if sensor readings have changed, false if they havent
 bool AP_WingPos::process_sensor_readings()
 {
@@ -702,9 +687,10 @@ void AP_WingPos::manual_control_switches_state_machine(AP_WingPos_SwitchPosition
 }
 
 // Manual control of wing position from switches on the RC is controlled
-// here. Manual control is allowed when armed, but not calibration.
-// Have yet to work out the details of making manual and auto-control
-// coexist.
+// here. Manual control is allowed when armed, but calibration is not
+// allowed when armed.
+//
+// MAVlink command to enter calibration is also considered here
 //
 // There is a three-position switch with these meanings:
 //  up/away from user - wing moves toward horizontal.
@@ -730,21 +716,46 @@ void AP_WingPos::manual_control_wing_pos(bool disarmed)
 
     _lastSwitchPos = curSwPos;
     _lastCalSwitchPos = curCalSwPos;
+
+    // If RC is not driving, allow MAVlink to calibrate. If RC is commanding calibration,
+    // allow MAVLink to cancel it
+    switch (_manualControlState) {
+    case AP_WINGPOS_MC_STATE_INIT:
+    case AP_WINGPOS_MC_STATE_STARTUP_HOLDDOWN:
+    case AP_WINGPOS_MC_STATE_NOT_DRIVING:
+        if (disarmed && _lastMavlinkWingAngleCmd == WA_CMD_CALIBRATE) {
+            start_calibration();
+            _manualControlState = AP_WINGPOS_MC_STATE_CALIBRATING;
+        }
+        break;
+    case AP_WINGPOS_MC_STATE_CALIBRATING:
+    case AP_WINGPOS_MC_STATE_CALIBRATION_FINISHED:
+        // allow MAVlink to cancel calibrate
+        if (_lastMavlinkWingAngleCmd == WA_CMD_CANCEL_CALIBRATE) {
+            cancel_calibration();
+            _manualControlState = AP_WINGPOS_MC_STATE_INIT;
+        }
+        break;
+    default:
+        break;
+    }
 }
 
-float AP_WingPos::calculate_wing_angle()
+// Calculate the wing angle from the sensor readings, by interpolating between
+// the min/max values from calibration
+float AP_WingPos::calculate_wing_angle(float left_sensor_value, float right_sensor_value)
 {
     float left_degrees = INVALID_WP_DEGREES;
     float right_degrees = INVALID_WP_DEGREES;
 
     if (_leftSensorMax && _leftSensorMin && _leftSensorMax != _leftSensorMin) {
-        float ratio = (float)(_left_sensor_value - _leftSensorMin) /
+        float ratio = (float)(left_sensor_value - _leftSensorMin) /
             (float)(_leftSensorMax - _leftSensorMin);
         left_degrees = ratio * 90.0;
     }
 
     if (_rightSensorMax && _rightSensorMin && _rightSensorMax != _rightSensorMin) {
-        float ratio = (float)(_right_sensor_value - _rightSensorMin) /
+        float ratio = (float)(right_sensor_value - _rightSensorMin) /
             (float)(_rightSensorMax - _rightSensorMin);
         right_degrees = ratio * 90.0;
     }
@@ -758,19 +769,23 @@ float AP_WingPos::calculate_wing_angle()
     return (left_degrees + right_degrees) / 2;
 }
 
+// Set the wing angle setpoint. In theory, the setpoint can come from MAVlink, autopilot
+// or pilot
 void AP_WingPos::set_wing_angle_setpoint(AP_WingPos_Setpoint_Source source, float value)
 {
     if (source == WP_SP_SOURCE_AUTOPILOT && _wingAngleSetpointSource == WP_SP_SOURCE_MAVLINK) {
         // MAVlink is overriding Autopilot
         return;
     }
-    //printf("%s: %d %.1f\n\r", __FUNCTION__, source, value);
-
     _wingAngleSetpointTime = AP_HAL::millis();
     _wingAngleSetpointSource = source;
     _wingAngleSetpoint = value;
 }
 
+//
+// Record the commands from MAVlink, but don't act on them yet.
+// They will be considered as we go through the appropriate parts of the
+// main loop
 void AP_WingPos::handle_message(const mavlink_channel_t chan, const mavlink_message_t &msg)
 {
     if (msg.msgid != MAVLINK_MSG_ID_WING_ANGLE_CMD) {
@@ -783,12 +798,8 @@ void AP_WingPos::handle_message(const mavlink_channel_t chan, const mavlink_mess
     // The mavlink message can command two things: calibration or setpoint
     switch (wing_angle_cmd.command) {
     case WA_CMD_NONE:
-        break;
     case WA_CMD_CALIBRATE:
-        // not supported yet
-        break;
     case WA_CMD_CANCEL_CALIBRATE:
-        // not supported yet
         break;
     case WA_CMD_NEW_SETPOINT:
         switch  (_lastMavlinkWingAngleCmd) {
@@ -820,7 +831,7 @@ void AP_WingPos::control_wing_angle()
         _right_sensor_value = sensor->get_right_sensor_val();
 
         // Calculate error - diff between current value and setpoint (_wingAngleSetpoint)
-        float degrees = calculate_wing_angle();
+        float degrees = calculate_wing_angle(_left_sensor_value, _right_sensor_value);
         float error = _wingAngleSetpoint - degrees;
 
         AP_WASERVO_Direction direction = error > 1 ? AP_WASERVO_DIRECTION_EXTEND :
@@ -828,12 +839,14 @@ void AP_WingPos::control_wing_angle()
 
         uint8_t speed = 0;
         if (direction == AP_WASERVO_DIRECTION_NONE) {
+            // error is within the tolerance, pass along drive=NONE speed=0
             drive_wing_pos(direction, speed);
         }
         else {
             float abs_error = fabs(error);
 
             // determine output value by multiplying command range by error
+            // I think this would work if wired the H-bridge correctly
             //abs_error *= 5;
             //xabs_error += 40;
             if ( abs_error >= 255.0) {
@@ -851,17 +864,21 @@ void AP_WingPos::control_wing_angle()
     }
 }
 
-// Called at 100 Hz or so. (For now, 10 Hz) Can be used to do whatever WingPos needs to do
+// Called at 100 Hz or so. Can be used to do whatever WingPos needs to do.
+// Currently it processes inputs from RC and MAVlink to determine if
+// Wing Angle needs to be manually set or controlled to a specific angle.
+// RC and MAVlink can also initiate calibration
 void AP_WingPos::periodic_activity()
 {
     /* Should investigate whether this is efficient - what's the pattern for arm/disarm in
      * arbitrary client code anyway? How to avoid repetitive polling?
-     * Also, do we want to allow manual control even when armed? I think we do, and
-     * we should incorporate safety_switch_state() into our state machine.
      */
     bool disarmed = hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED;
+
+    // Process inputs and initiate activity accordingly
     manual_control_wing_pos(disarmed);
 
+    // For procedures that we control autonomously, exert control here
     if (_manualControlState == AP_WINGPOS_MC_STATE_CALIBRATING) {
 
         calibration_state_machine();
@@ -880,7 +897,4 @@ void AP_WingPos::periodic_activity()
             _wingAngleSetpointSource = WP_SP_SOURCE_NONE;
         }
     }
-
 }
-
-
