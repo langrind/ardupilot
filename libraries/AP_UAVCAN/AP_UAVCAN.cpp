@@ -53,6 +53,7 @@
 #include <AP_ADSB/AP_ADSB.h>
 #include "AP_UAVCAN_DNA_Server.h"
 #include <AP_Logger/AP_Logger.h>
+#include "AP_TinCAN/AP_TinCAN.h"
 
 #define LED_DELAY_US 50000
 
@@ -239,6 +240,16 @@ void AP_UAVCAN::init(uint8_t driver_index, bool enable_filters)
         return;
     }
 
+#ifdef TINCAN_IN_UAVCAN
+    // Start tincan here
+    AP_TinCAN *tincan = AP_TinCAN::get_singleton();
+    if (!tincan) {
+        tincan = new AP_TinCAN;
+        // not allowed to init tincan for multiple drivers yet
+        tincan->init(driver_index, enable_filters);
+    }
+#endif
+
     // Roundup all subscribers from supported drivers
     AP_UAVCAN_DNA_Server::subscribe_msgs(this);
     AP_GPS_UAVCAN::subscribe_msgs(this);
@@ -295,7 +306,9 @@ void AP_UAVCAN::init(uint8_t driver_index, bool enable_filters)
     
     _led_conf.devices_count = 0;
     if (enable_filters) {
+#ifndef TINCAN_IN_UAVCAN
         configureCanAcceptanceFilters(*_node);
+#endif
     }
 
     /*
@@ -321,6 +334,10 @@ void AP_UAVCAN::init(uint8_t driver_index, bool enable_filters)
 
 void AP_UAVCAN::loop(void)
 {
+#ifdef TINCAN_IN_UAVCAN
+    AP_TinCAN *tincan = AP_TinCAN::get_singleton();
+#endif
+
     while (true) {
         if (!_initialized) {
             hal.scheduler->delay_microseconds(1000);
@@ -366,6 +383,9 @@ void AP_UAVCAN::loop(void)
         rtcm_stream_send();
         safety_state_send();
         AP::uavcan_dna_server().verify_nodes(this);
+#ifdef TINCAN_IN_UAVCAN
+        tincan->one_ms_tick();
+#endif
     }
 }
 

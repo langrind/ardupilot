@@ -28,6 +28,9 @@ public:
         Protocol_Type_KDECAN = 2,
         Protocol_Type_ToshibaCAN = 3,
         Protocol_Type_PiccoloCAN = 4,
+#ifndef TINCAN_IN_UAVCAN
+         Protocol_Type_TinCAN = 5,
+#endif
     };
 
     void init(void);

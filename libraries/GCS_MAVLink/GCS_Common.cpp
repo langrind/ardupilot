@@ -41,6 +41,7 @@
 #include <AP_Baro/AP_Baro.h>
 #include <AP_EFI/AP_EFI.h>
 #include <AP_Proximity/AP_Proximity.h>
+#include <AP_TinCAN/AP_TinCAN.h>
 
 #include <stdio.h>
 
@@ -4557,7 +4558,27 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
                     break;
                 }
 #endif
+#ifdef TINCAN_ENABLED
+#ifndef TINCAN_IN_UAVCAN
+                case AP_BoardConfig_CAN::Protocol_Type_TinCAN: {
+                    AP_TinCAN *ap_tcan = AP_TinCAN::get_singleton();
+                    if (ap_tcan != nullptr) {
+                        ap_tcan->send_esc_telemetry_mavlink(uint8_t(chan));
+                    }
+                    break;
+                }
+#endif
+#endif
                 case AP_BoardConfig_CAN::Protocol_Type_UAVCAN:
+#ifdef TINCAN_IN_UAVCAN
+                    {
+                        AP_TinCAN *ap_tcan = AP_TinCAN::get_singleton();
+                        if (ap_tcan != nullptr) {
+                            ap_tcan->send_esc_telemetry_mavlink(uint8_t(chan));
+                        }
+                    }
+#endif
+                    break;
                 case AP_BoardConfig_CAN::Protocol_Type_None:
                 default:
                     break;

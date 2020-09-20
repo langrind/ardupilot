@@ -115,6 +115,10 @@
 #include <SITL/SITL.h>
 #endif
 
+#include <AP_WingAngleSensor/AP_WingAngleSensor.h>
+#include <AP_WingAngleServo/AP_WingAngleServo.h>
+#include <AP_Alt_KDECAN/AP_Alt_KDECAN.h>
+
 /*
   main APM:Plane class
  */
@@ -768,6 +772,12 @@ private:
 
     // rudder mixing gain for differential thrust (0 - 1)
     float rudder_dt;
+
+#ifdef TINCAN_ENABLED
+    AP_WingAngleSensor wing_angle_sensor;
+    AP_WingAngleServo  wing_angle_servo;
+    AP_Alt_KDECAN      alt_kdecan;
+#endif
 
     void adjust_nav_pitch_throttle(void);
     void update_load_factor(void);

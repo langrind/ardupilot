@@ -49,6 +49,9 @@
 #include <AP_UAVCAN/AP_UAVCAN_SLCAN.h>
 # include <hal.h>
 
+#include "AP_HAL/AP_HAL_Boards.h"
+#include "AP_TinCAN/AP_TinCAN.h"
+
 # if !defined(STM32H7XX)
 #include "CANIface.h"
 
@@ -453,6 +456,13 @@ uavcan::int16_t CanIface::receive(uavcan::CanFrame& out_frame, uavcan::Monotonic
         }
         rx_queue_.pop(out_frame, utc_usec, out_flags);
     }
+#if defined(TINCAN_ENABLED) && defined(TINCAN_IN_UAVCAN)
+    AP_TinCAN *tincan = AP_TinCAN::get_singleton();
+    if (tincan && tincan->handle_received_frame(out_frame)) {
+        // TinCAN consumed the frame, don't process it in UAVCAN
+        return 0;
+    }
+#endif
     out_ts_utc = uavcan::UtcTime::fromUSec(utc_usec);
     return 1;
 }
